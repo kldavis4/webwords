@@ -97,6 +97,7 @@ export default function Home() {
   const boardSize = round.boardSize;
   const currentWord = wordFromPath(path);
   const totalScore = foundWords.reduce((sum, word) => sum + word.score, 0);
+  const timeAlertLevel = timeLeft <= 10 ? "urgent" : timeLeft <= 30 ? "warning" : null;
   const foundWordSet = useMemo(() => new Set(foundWords.map((word) => word.word)), [foundWords]);
   const missingWords = useMemo(
     () => round.answers.filter((word) => !foundWordSet.has(word)).sort(sortAnswers),
@@ -421,6 +422,14 @@ export default function Home() {
           <h1>Boggle</h1>
         </div>
         <div className="topbar-actions" aria-label="Round controls">
+          <div
+            aria-label={`Time remaining ${formatTime(timeLeft)}`}
+            className={classNames("timer-pill", timeAlertLevel)}
+            role="timer"
+          >
+            <Clock3 aria-hidden="true" size={18} />
+            <span>{formatTime(timeLeft)}</span>
+          </div>
           <button className="icon-button" onClick={resetRound} title="Reset round" type="button">
             <RotateCcw aria-hidden="true" size={20} />
           </button>
@@ -452,11 +461,6 @@ export default function Home() {
       <section className="game-grid">
         <aside className="status-panel" aria-label="Round status">
           <div className="metric-row">
-            <div className="metric">
-              <Clock3 aria-hidden="true" size={18} />
-              <span>Time</span>
-              <strong>{formatTime(timeLeft)}</strong>
-            </div>
             <div className="metric">
               <Trophy aria-hidden="true" size={18} />
               <span>Score</span>
