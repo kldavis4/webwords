@@ -1,6 +1,6 @@
-# WordWeb Boggle
+# WordWeb
 
-A Next.js implementation of a dictionary-backed Boggle word search game.
+A Next.js implementation of a dictionary-backed word search game.
 
 ## Run
 

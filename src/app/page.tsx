@@ -418,8 +418,8 @@ export default function Home() {
     <main className="game-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">WordWeb</p>
-          <h1>Boggle</h1>
+          <p className="eyebrow">Word Grid</p>
+          <h1>WordWeb</h1>
         </div>
         <div className="topbar-actions" aria-label="Round controls">
           <div
@@ -518,7 +518,7 @@ export default function Home() {
           ) : null}
         </aside>
 
-        <section className="board-stage" aria-label="Boggle board">
+        <section className="board-stage" aria-label="Word grid">
           <div className="current-word" aria-live="polite">
             <span>Current</span>
             <strong>{currentWord || typedWord.toUpperCase() || "-"}</strong>
@@ -526,9 +526,9 @@ export default function Home() {
 
           <div className="board-frame">
             <div
-              aria-label={`${boardSize} by ${boardSize} Boggle board`}
+              aria-label={`${boardSize} by ${boardSize} word grid`}
               className="board"
-              data-testid="boggle-board"
+              data-testid="word-grid"
               onPointerCancel={cancelDrag}
               onPointerDown={handleBoardPointerDown}
               onPointerMove={handleBoardPointerMove}

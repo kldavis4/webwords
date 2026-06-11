@@ -164,8 +164,8 @@ h2 {
 
 .icon-button.sound-on {
   border-color: rgba(21, 92, 68, 0.2);
-  background: var(--mint);
-  color: var(--green-deep);
+  background: var(--green);
+  color: white;
 }
 
 .icon-button.submit {
