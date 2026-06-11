@@ -345,6 +345,32 @@ progress::-moz-progress-bar {
   white-space: nowrap;
 }
 
+.detail-list .scored-detail {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 190px;
+}
+
+.scored-detail-word {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.score-label {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #22352c;
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .endcap {
   display: flex;
   align-items: center;
@@ -446,6 +472,7 @@ progress::-moz-progress-bar {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .tile:hover:not(:disabled) {

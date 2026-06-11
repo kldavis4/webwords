@@ -91,7 +91,7 @@ export default function Home() {
   const isDraggingRef = useRef(false);
   const activePointerIdRef = useRef<number | null>(null);
   const hasLoadedInitialRoundRef = useRef(false);
-  const { isMuted, play, toggleMuted } = useGameSound();
+  const { isMuted, play, prepare: prepareSound, toggleMuted } = useGameSound();
 
   const isFinished = timeLeft === 0;
   const boardSize = round.boardSize;
@@ -103,6 +103,7 @@ export default function Home() {
     () => round.answers.filter((word) => !foundWordSet.has(word)).sort(sortAnswers),
     [foundWordSet, round.answers]
   );
+  const bestLeftWord = isFinished ? (missingWords[0] ?? "") : "";
   const longestWord = foundWords.reduce((longest, next) => {
     if (next.word.length > longest.length) {
       return next.word;
@@ -143,15 +144,19 @@ export default function Home() {
   }, []);
 
   const updatePath = useCallback((pathUpdate: Tile[] | ((currentPath: Tile[]) => Tile[])) => {
-    setPath((currentPath) => {
-      const nextPath = typeof pathUpdate === "function" ? pathUpdate(currentPath) : pathUpdate;
-      pathRef.current = nextPath;
+    const nextPath = typeof pathUpdate === "function" ? pathUpdate(pathRef.current) : pathUpdate;
 
-      return nextPath;
-    });
+    pathRef.current = nextPath;
+    setPath(nextPath);
   }, []);
 
   const clearPath = useCallback(() => updatePath([]), [updatePath]);
+
+  const playTileSound = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => play("tile"), 0);
+    });
+  }, [play]);
 
   useEffect(() => {
     if (hasLoadedInitialRoundRef.current) {
@@ -211,9 +216,9 @@ export default function Home() {
       }
 
       updatePath(nextPath);
-      play("tile");
+      playTileSound();
     },
-    [play, updatePath]
+    [playTileSound, updatePath]
   );
 
   const startNewRound = useCallback(() => {
@@ -348,7 +353,8 @@ export default function Home() {
     isDraggingRef.current = true;
     setTypedWord("");
     updatePath([tile]);
-    play("tile");
+    prepareSound();
+    playTileSound();
   };
 
   const finishDrag = useCallback(
@@ -419,7 +425,7 @@ export default function Home() {
       <header className="topbar">
         <div>
           <p className="eyebrow">Word Grid</p>
-          <h1>WordWeb</h1>
+          <h1>WebWords</h1>
         </div>
         <div className="topbar-actions" aria-label="Round controls">
           <div
@@ -502,7 +508,16 @@ export default function Home() {
             </div>
             <div>
               <dt>Best left</dt>
-              <dd>{isFinished ? missingWords[0] || "-" : "-"}</dd>
+              <dd className="scored-detail">
+                {bestLeftWord ? (
+                  <>
+                    <span className="scored-detail-word">{bestLeftWord}</span>
+                    <span className="score-label">{scoreWord(bestLeftWord)} pts</span>
+                  </>
+                ) : (
+                  "-"
+                )}
+              </dd>
             </div>
             <div>
               <dt>Potential</dt>

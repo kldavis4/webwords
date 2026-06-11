@@ -1,4 +1,4 @@
-# WordWeb
+# WebWords
 
 A Next.js implementation of a dictionary-backed word search game.
 

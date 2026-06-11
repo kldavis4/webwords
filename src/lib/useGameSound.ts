@@ -49,6 +49,32 @@ export function useGameSound() {
     return contextRef.current;
   }, []);
 
+  const prepare = useCallback(() => {
+    if (isMuted) {
+      return;
+    }
+
+    const audioContext = getContext();
+
+    if (!audioContext) {
+      return;
+    }
+
+    void audioContext.resume();
+  }, [getContext, isMuted]);
+
+  useEffect(() => {
+    if (isMuted || contextRef.current) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      getContext();
+    }, 200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [getContext, isMuted]);
+
   const playTone = useCallback(
     (tone: Tone) => {
       if (isMuted) {
@@ -144,6 +170,7 @@ export function useGameSound() {
   return {
     isMuted,
     play,
+    prepare,
     toggleMuted
   };
 }

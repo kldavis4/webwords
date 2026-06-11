@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "WordWeb",
+  title: "WebWords",
   description: "A fast, dictionary-backed word search game built with Next.js."
 };
 
