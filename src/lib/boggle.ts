@@ -1,6 +1,32 @@
-export const BOARD_SIZE = 4;
 export const ROUND_SECONDS = 180;
-export const MIN_ROUND_WORDS = 36;
+export const BOARD_SIZES = [4, 5, 6] as const;
+export const DEFAULT_BOARD_SIZE: BoardSize = 4;
+
+export type BoardSize = (typeof BOARD_SIZES)[number];
+
+export type BoardConfig = {
+  maxAttempts: number;
+  minRoundWords: number;
+  size: BoardSize;
+};
+
+export const BOARD_CONFIGS: Record<BoardSize, BoardConfig> = {
+  4: {
+    maxAttempts: 160,
+    minRoundWords: 36,
+    size: 4
+  },
+  5: {
+    maxAttempts: 28,
+    minRoundWords: 100,
+    size: 5
+  },
+  6: {
+    maxAttempts: 12,
+    minRoundWords: 180,
+    size: 6
+  }
+};
 
 export type Tile = {
   col: number;
@@ -18,11 +44,12 @@ export type DictionaryIndex = {
 export type Round = {
   answers: string[];
   board: Tile[];
+  boardSize: BoardSize;
 };
 
 export type RandomSource = () => number;
 
-const DICE = [
+const CLASSIC_DICE = [
   ["A", "A", "E", "E", "G", "N"],
   ["A", "B", "B", "J", "O", "O"],
   ["A", "C", "H", "O", "P", "S"],
@@ -41,6 +68,38 @@ const DICE = [
   ["H", "L", "N", "N", "R", "Z"]
 ];
 
+const LETTER_WEIGHTS: Array<[string, number]> = [
+  ["E", 12],
+  ["A", 9],
+  ["I", 9],
+  ["O", 8],
+  ["N", 6],
+  ["R", 6],
+  ["T", 6],
+  ["L", 4],
+  ["S", 4],
+  ["U", 4],
+  ["D", 4],
+  ["G", 3],
+  ["B", 2],
+  ["C", 2],
+  ["F", 2],
+  ["H", 2],
+  ["M", 2],
+  ["P", 2],
+  ["V", 2],
+  ["W", 2],
+  ["Y", 2],
+  ["K", 1],
+  ["J", 1],
+  ["QU", 1],
+  ["X", 1],
+  ["Z", 1]
+];
+
+const LETTER_BAG = LETTER_WEIGHTS.flatMap(([letter, weight]) => Array.from({ length: weight }, () => letter));
+const NEIGHBOR_CACHE = new Map<BoardSize, number[][]>();
+
 function shuffle<T>(values: T[], rng: RandomSource): T[] {
   const shuffled = [...values];
 
@@ -54,6 +113,20 @@ function shuffle<T>(values: T[], rng: RandomSource): T[] {
 
 export function normalizeWord(value: string): string {
   return value.toUpperCase().replace(/[^A-Z]/g, "");
+}
+
+export function isBoardSize(value: number): value is BoardSize {
+  return BOARD_SIZES.includes(value as BoardSize);
+}
+
+export function parseBoardSize(value: null | string): BoardSize {
+  const parsedSize = Number(value);
+
+  if (isBoardSize(parsedSize)) {
+    return parsedSize;
+  }
+
+  return DEFAULT_BOARD_SIZE;
 }
 
 export function createSeededRng(seed: string): RandomSource {
@@ -82,7 +155,7 @@ export function buildDictionaryIndex(words: string[]): DictionaryIndex {
   for (const word of words) {
     const normalized = normalizeWord(word);
 
-    if (normalized.length < 3 || normalized.length > BOARD_SIZE * BOARD_SIZE) {
+    if (normalized.length < 3) {
       continue;
     }
 
@@ -99,15 +172,33 @@ export function buildDictionaryIndex(words: string[]): DictionaryIndex {
   };
 }
 
-export function createBoard(rng: RandomSource = Math.random): Tile[] {
-  return shuffle(DICE, rng).map((die, index) => {
+function createClassicBoard(rng: RandomSource): Tile[] {
+  return shuffle(CLASSIC_DICE, rng).map((die, index) => {
     const value = die[Math.floor(rng() * die.length)];
 
     return {
-      col: index % BOARD_SIZE,
+      col: index % DEFAULT_BOARD_SIZE,
       id: `${index}-${value}-${Math.floor(rng() * 100000)}`,
       index,
-      row: Math.floor(index / BOARD_SIZE),
+      row: Math.floor(index / DEFAULT_BOARD_SIZE),
+      value
+    };
+  });
+}
+
+export function createBoard(boardSize: BoardSize = DEFAULT_BOARD_SIZE, rng: RandomSource = Math.random): Tile[] {
+  if (boardSize === DEFAULT_BOARD_SIZE) {
+    return createClassicBoard(rng);
+  }
+
+  return Array.from({ length: boardSize * boardSize }, (_, index) => {
+    const value = LETTER_BAG[Math.floor(rng() * LETTER_BAG.length)];
+
+    return {
+      col: index % boardSize,
+      id: `${boardSize}-${index}-${value}-${Math.floor(rng() * 100000)}`,
+      index,
+      row: Math.floor(index / boardSize),
       value
     };
   });
@@ -150,9 +241,9 @@ export function scoreWord(word: string): number {
   return 11;
 }
 
-function neighborsFor(index: number): number[] {
-  const row = Math.floor(index / BOARD_SIZE);
-  const col = index % BOARD_SIZE;
+function neighborsFor(index: number, boardSize: BoardSize): number[] {
+  const row = Math.floor(index / boardSize);
+  const col = index % boardSize;
   const neighbors: number[] = [];
 
   for (let rowOffset = -1; rowOffset <= 1; rowOffset += 1) {
@@ -164,8 +255,8 @@ function neighborsFor(index: number): number[] {
       const nextRow = row + rowOffset;
       const nextCol = col + colOffset;
 
-      if (nextRow >= 0 && nextRow < BOARD_SIZE && nextCol >= 0 && nextCol < BOARD_SIZE) {
-        neighbors.push(nextRow * BOARD_SIZE + nextCol);
+      if (nextRow >= 0 && nextRow < boardSize && nextCol >= 0 && nextCol < boardSize) {
+        neighbors.push(nextRow * boardSize + nextCol);
       }
     }
   }
@@ -173,14 +264,28 @@ function neighborsFor(index: number): number[] {
   return neighbors;
 }
 
-const NEIGHBORS = Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, index) => neighborsFor(index));
+function neighborsForSize(boardSize: BoardSize): number[][] {
+  const cachedNeighbors = NEIGHBOR_CACHE.get(boardSize);
 
-export function isWordOnBoard(board: Tile[], rawWord: string): boolean {
+  if (cachedNeighbors) {
+    return cachedNeighbors;
+  }
+
+  const neighbors = Array.from({ length: boardSize * boardSize }, (_, index) => neighborsFor(index, boardSize));
+
+  NEIGHBOR_CACHE.set(boardSize, neighbors);
+
+  return neighbors;
+}
+
+export function isWordOnBoard(board: Tile[], rawWord: string, boardSize: BoardSize = DEFAULT_BOARD_SIZE): boolean {
   const word = normalizeWord(rawWord);
 
   if (word.length < 3) {
     return false;
   }
+
+  const neighbors = neighborsForSize(boardSize);
 
   const search = (tile: Tile, offset: number, used: Set<number>): boolean => {
     if (!word.startsWith(tile.value, offset)) {
@@ -195,7 +300,7 @@ export function isWordOnBoard(board: Tile[], rawWord: string): boolean {
 
     used.add(tile.index);
 
-    for (const neighborIndex of NEIGHBORS[tile.index]) {
+    for (const neighborIndex of neighbors[tile.index]) {
       if (!used.has(neighborIndex) && search(board[neighborIndex], nextOffset, used)) {
         used.delete(tile.index);
         return true;
@@ -209,8 +314,9 @@ export function isWordOnBoard(board: Tile[], rawWord: string): boolean {
   return board.some((tile) => search(tile, 0, new Set<number>()));
 }
 
-export function solveBoard(board: Tile[], dictionary: DictionaryIndex): string[] {
+export function solveBoard(board: Tile[], dictionary: DictionaryIndex, boardSize: BoardSize = DEFAULT_BOARD_SIZE): string[] {
   const found = new Set<string>();
+  const neighbors = neighborsForSize(boardSize);
 
   const visit = (tile: Tile, currentWord: string, used: Set<number>) => {
     const nextWord = currentWord + tile.value;
@@ -225,7 +331,7 @@ export function solveBoard(board: Tile[], dictionary: DictionaryIndex): string[]
       found.add(nextWord);
     }
 
-    for (const neighborIndex of NEIGHBORS[tile.index]) {
+    for (const neighborIndex of neighbors[tile.index]) {
       if (!used.has(neighborIndex)) {
         visit(board[neighborIndex], nextWord, used);
       }
@@ -241,29 +347,37 @@ export function solveBoard(board: Tile[], dictionary: DictionaryIndex): string[]
   return Array.from(found).sort(sortAnswers);
 }
 
-export function createRound(dictionary: DictionaryIndex, rng: RandomSource = Math.random): Round {
+export function createRound(
+  dictionary: DictionaryIndex,
+  boardSize: BoardSize = DEFAULT_BOARD_SIZE,
+  rng: RandomSource = Math.random
+): Round {
+  const config = BOARD_CONFIGS[boardSize];
   let bestRound: Round = {
     answers: [],
-    board: createBoard(rng)
+    board: createBoard(boardSize, rng),
+    boardSize
   };
 
-  bestRound.answers = solveBoard(bestRound.board, dictionary);
+  bestRound.answers = solveBoard(bestRound.board, dictionary, boardSize);
 
-  for (let attempt = 0; attempt < 160; attempt += 1) {
-    const board = createBoard(rng);
-    const answers = solveBoard(board, dictionary);
+  for (let attempt = 0; attempt < config.maxAttempts; attempt += 1) {
+    const board = createBoard(boardSize, rng);
+    const answers = solveBoard(board, dictionary, boardSize);
 
     if (answers.length > bestRound.answers.length) {
       bestRound = {
         answers,
-        board
+        board,
+        boardSize
       };
     }
 
-    if (answers.length >= MIN_ROUND_WORDS) {
+    if (answers.length >= config.minRoundWords) {
       return {
         answers,
-        board
+        board,
+        boardSize
       };
     }
   }

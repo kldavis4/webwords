@@ -13,18 +13,31 @@ import {
   VolumeX,
   X
 } from "lucide-react";
-import { type FormEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type FormEvent,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import dictionaryWords from "@/data/dictionary.json";
 import {
   areAdjacent,
+  BOARD_SIZES,
   buildDictionaryIndex,
   createRound,
   createSeededRng,
+  DEFAULT_BOARD_SIZE,
   isWordOnBoard,
   normalizeWord,
+  parseBoardSize,
   ROUND_SECONDS,
   scoreWord,
   sortAnswers,
+  type BoardSize,
   type Round,
   type Tile,
   wordFromPath
@@ -49,6 +62,8 @@ const initialToast: Toast = {
   text: "Ready"
 };
 
+const BOARD_SIZE_STORAGE_KEY = "wordweb-board-size";
+
 function formatTime(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
@@ -62,7 +77,9 @@ function classNames(...names: Array<false | null | string | undefined>): string 
 
 export default function Home() {
   const [dictionary] = useState(() => buildDictionaryIndex(dictionaryWords as string[]));
-  const [round, setRound] = useState<Round>(() => createRound(dictionary, createSeededRng("wordweb-initial-board")));
+  const [round, setRound] = useState<Round>(() =>
+    createRound(dictionary, DEFAULT_BOARD_SIZE, createSeededRng("wordweb-initial-board"))
+  );
   const [foundWords, setFoundWords] = useState<FoundWord[]>([]);
   const [path, setPath] = useState<Tile[]>([]);
   const [typedWord, setTypedWord] = useState("");
@@ -73,9 +90,11 @@ export default function Home() {
   const finishSoundPlayedRef = useRef(false);
   const isDraggingRef = useRef(false);
   const activePointerIdRef = useRef<number | null>(null);
+  const hasLoadedInitialRoundRef = useRef(false);
   const { isMuted, play, toggleMuted } = useGameSound();
 
   const isFinished = timeLeft === 0;
+  const boardSize = round.boardSize;
   const currentWord = wordFromPath(path);
   const totalScore = foundWords.reduce((sum, word) => sum + word.score, 0);
   const foundWordSet = useMemo(() => new Set(foundWords.map((word) => word.word)), [foundWords]);
@@ -133,6 +152,24 @@ export default function Home() {
 
   const clearPath = useCallback(() => updatePath([]), [updatePath]);
 
+  useEffect(() => {
+    if (hasLoadedInitialRoundRef.current) {
+      return;
+    }
+
+    hasLoadedInitialRoundRef.current = true;
+
+    const storedBoardSize = parseBoardSize(window.localStorage.getItem(BOARD_SIZE_STORAGE_KEY));
+
+    setRound(createRound(dictionary, storedBoardSize));
+    setFoundWords([]);
+    clearPath();
+    setTypedWord("");
+    setTimeLeft(ROUND_SECONDS);
+    finishSoundPlayedRef.current = false;
+    setIsPaused(false);
+  }, [clearPath, dictionary]);
+
   const tileFromElement = useCallback(
     (element: Element | null) => {
       const tileElement = element?.closest("[data-tile-index]");
@@ -179,7 +216,7 @@ export default function Home() {
   );
 
   const startNewRound = useCallback(() => {
-    const nextRound = createRound(dictionary);
+    const nextRound = createRound(dictionary, boardSize);
 
     setRound(nextRound);
     setFoundWords([]);
@@ -190,7 +227,27 @@ export default function Home() {
     setIsPaused(false);
     play("new");
     pushToast("New board", "neutral");
-  }, [clearPath, dictionary, play, pushToast]);
+  }, [boardSize, clearPath, dictionary, play, pushToast]);
+
+  const changeBoardSize = useCallback(
+    (nextBoardSize: BoardSize) => {
+      if (nextBoardSize === boardSize) {
+        return;
+      }
+
+      window.localStorage.setItem(BOARD_SIZE_STORAGE_KEY, String(nextBoardSize));
+      setRound(createRound(dictionary, nextBoardSize));
+      setFoundWords([]);
+      clearPath();
+      setTypedWord("");
+      setTimeLeft(ROUND_SECONDS);
+      finishSoundPlayedRef.current = false;
+      setIsPaused(false);
+      play("new");
+      pushToast(`${nextBoardSize}x${nextBoardSize} board`, "neutral");
+    },
+    [boardSize, clearPath, dictionary, play, pushToast]
+  );
 
   const resetRound = useCallback(() => {
     setFoundWords([]);
@@ -250,7 +307,7 @@ export default function Home() {
         return;
       }
 
-      if (!isWordOnBoard(round.board, word)) {
+      if (!isWordOnBoard(round.board, word, round.boardSize)) {
         rejectWord("Not on board");
         return;
       }
@@ -407,6 +464,23 @@ export default function Home() {
             </div>
           </div>
 
+          <div className="size-control" aria-label="Board size">
+            <span>Board</span>
+            <div className="segmented-control">
+              {BOARD_SIZES.map((size) => (
+                <button
+                  aria-pressed={size === boardSize}
+                  className={classNames(size === boardSize && "active")}
+                  key={size}
+                  onClick={() => changeBoardSize(size)}
+                  type="button"
+                >
+                  {size}x{size}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="progress-block">
             <div>
               <span>Found</span>
@@ -448,14 +522,16 @@ export default function Home() {
 
           <div className="board-frame">
             <div
+              aria-label={`${boardSize} by ${boardSize} Boggle board`}
               className="board"
               data-testid="boggle-board"
               onPointerCancel={cancelDrag}
               onPointerDown={handleBoardPointerDown}
               onPointerMove={handleBoardPointerMove}
               onPointerUp={finishDrag}
+              style={{ "--board-size": boardSize } as CSSProperties}
             >
-              <svg aria-hidden="true" className="path-lines" viewBox="0 0 400 400">
+              <svg aria-hidden="true" className="path-lines" viewBox={`0 0 ${boardSize * 100} ${boardSize * 100}`}>
                 {path.length > 1 ? <polyline points={pathPoints} /> : null}
               </svg>
 
