@@ -63,6 +63,11 @@ const initialToast: Toast = {
 };
 
 const BOARD_SIZE_STORAGE_KEY = "wordweb-board-size";
+const DRAG_TILE_HIT_ZONE_BY_SIZE: Record<BoardSize, number> = {
+  4: 0.72,
+  5: 0.78,
+  6: 0.84
+};
 
 function formatTime(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
@@ -193,6 +198,33 @@ export default function Home() {
       return round.board[tileIndex] ?? null;
     },
     [round.board]
+  );
+
+  const tileFromDragPoint = useCallback(
+    (clientX: number, clientY: number) => {
+      const tileElement = document.elementFromPoint(clientX, clientY)?.closest("[data-tile-index]");
+
+      if (!(tileElement instanceof HTMLElement)) {
+        return null;
+      }
+
+      const hitZoneRatio = DRAG_TILE_HIT_ZONE_BY_SIZE[round.boardSize];
+      const bounds = tileElement.getBoundingClientRect();
+      const xInset = (bounds.width * (1 - hitZoneRatio)) / 2;
+      const yInset = (bounds.height * (1 - hitZoneRatio)) / 2;
+      const isInActivationZone =
+        clientX >= bounds.left + xInset &&
+        clientX <= bounds.right - xInset &&
+        clientY >= bounds.top + yInset &&
+        clientY <= bounds.bottom - yInset;
+
+      if (!isInActivationZone) {
+        return null;
+      }
+
+      return tileFromElement(tileElement);
+    },
+    [round.boardSize, tileFromElement]
   );
 
   const addTileToPath = useCallback(
@@ -405,7 +437,7 @@ export default function Home() {
       return;
     }
 
-    const tile = tileFromElement(document.elementFromPoint(event.clientX, event.clientY));
+    const tile = tileFromDragPoint(event.clientX, event.clientY);
 
     if (!tile) {
       return;
